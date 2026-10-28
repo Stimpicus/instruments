@@ -1,0 +1,7 @@
+target/
+# Reference recordings: downloaded data, not ours to commit (see README).
+reference/
+# The workbench log is kept locally.
+listening/
+# Python bytecode.
+__pycache__/

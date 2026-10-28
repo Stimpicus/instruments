@@ -1,0 +1,14 @@
+[package]
+name = "instruments"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Physically modelled instruments, rendered offline into multisamples. No dependencies, no audio device."
+
+[dependencies]
+
+[profile.dev]
+opt-level = 2
+
+[profile.release]
+debug = 1

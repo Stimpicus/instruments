@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instrument Workbench</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #f4f3ef; --panel: #ffffff; --ink: #1d1c1a; --muted: #6b675f; --line: #dedad2;
+  --accent: #b5562b; --accent-ink: #ffffff; --soft: #f0e6df; --good: #2f7d4f; --bad: #b23b3b;
+  --wood: #e9dcc7; --fret: #b9ab93; --string: #8a7f6c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161514; --panel: #201f1d; --ink: #ece9e3; --muted: #9c978d; --line: #36332f;
+    --accent: #e07a45; --accent-ink: #1a1310; --soft: #2d2420; --good: #5fbf86; --bad: #e07070;
+    --wood: #2e2820; --fret: #5c5244; --string: #a39680;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+#status { color: var(--muted); font-variant-numeric: tabular-nums; flex: 1; min-width: 200px; }
+main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+main > div { min-width: 0; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+h3 { font-size: 12px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+.knob { display: grid; grid-template-columns: 1fr 64px; gap: 2px 8px; margin-bottom: 8px; }
+.knob label { font-size: 13px; }
+.knob output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+.knob input { grid-column: 1 / 3; width: 100%; accent-color: var(--accent); }
+.knob.changed label { color: var(--accent); font-weight: 600; }
+input[type=range] { accent-color: var(--accent); }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.on { background: var(--soft); border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+select, input[type=text], input[type=number], textarea { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+textarea { width: 100%; min-height: 60px; resize: vertical; }
+.hint { color: var(--muted); font-size: 12px; }
+/* fretboard */
+#board { overflow-x: auto; }
+#frets { display: grid; grid-template-columns: 44px repeat(21, minmax(34px, 1fr)); background: var(--wood); border-radius: 6px; min-width: 760px; user-select: none; }
+#frets .cell { position: relative; height: 30px; border-right: 2px solid var(--fret); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 11px; color: transparent; }
+#frets .cell::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: var(--th, 1px); background: var(--string); }
+#frets .cell span { position: relative; z-index: 1; padding: 1px 4px; border-radius: 9px; }
+#frets .cell:hover span { color: var(--ink); background: var(--panel); }
+#frets .cell.open { border-right: 5px solid var(--fret); }
+#frets .cell.hit span { color: var(--accent-ink); background: var(--accent); }
+#frets .cell.ring span { color: #fff; background: rgba(224, 122, 69, var(--glow, 1)); box-shadow: 0 0 calc(var(--glow, 0) * 10px) rgba(224, 122, 69, .9); }
+#roll { height: 200px; margin: 6px 0 8px; }
+#frets .num { height: 18px; font-size: 10px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+#frets .num.dot { color: var(--ink); font-weight: 700; }
+/* chords */
+.chords { display: flex; flex-wrap: wrap; gap: 6px; }
+.chords button { min-width: 52px; }
+canvas { width: 100%; display: block; background: #0f0e0d; border-radius: 6px; }
+#wave { height: 90px; margin-bottom: 8px; }
+#spec { height: 220px; }
+.readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px 14px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+.readout div span { display: block; color: var(--muted); font-size: 11px; }
+.ab { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tally { font-variant-numeric: tabular-nums; }
+.verdict.good { color: var(--good); font-weight: 600; } .verdict.bad { color: var(--bad); font-weight: 600; }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.hidden { display: none !important; }
+#progress { height: 3px; background: var(--accent); width: 0; transition: width .15s; position: fixed; top: 0; left: 0; z-index: 3; }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<header>
+  <h1>Instrument Workbench</h1>
+  <span id="status">loading…</span>
+  <label class="hint">volume <input id="volume" type="range" min="0" max="1.5" step="0.01" value="0.8"></label>
+  <label class="hint"><input id="limiter" type="checkbox" checked> limiter</label>
+  <button id="stop">Stop (Esc)</button>
+</header>
+<main>
+<div>
+  <section>
+    <h2>Pluck</h2>
+    <div class="row">
+      <button id="tool-pick" class="on">Pick</button>
+      <button id="tool-finger">Finger</button>
+      <label class="hint"><input id="vary-seed" type="checkbox" checked> vary each pluck</label>
+    </div>
+    <div id="knobs-pluck"></div>
+    <h3>Strings</h3><div id="knobs-strings"></div>
+    <h3>Body</h3><div id="knobs-body"></div>
+    <h3>Polarizations and noise</h3><div id="knobs-pol"></div>
+    <div class="row"><button id="reset">Reset all</button><button id="copy">Copy settings</button></div>
+    <p class="hint">Changed knobs turn orange. Settings are sent with every note; nothing is saved to the model until we commit a change.</p>
+  </section>
+  <section>
+    <h2>Compare settings</h2>
+    <div class="ab">
+      <button id="save-a">Store as A</button><button id="save-b">Store as B</button>
+      <button id="play-a" disabled>Play A</button><button id="play-b" disabled>Play B</button>
+    </div>
+    <div class="row" style="margin-top:8px"><button id="ab-blind" disabled>Blind: which is A?</button></div>
+    <div id="ab-blind-ui" class="hidden">
+      <div class="row"><button id="abx-1">Play 1</button><button id="abx-2">Play 2</button></div>
+      <div class="row"><button id="abx-g1">1 is A</button><button id="abx-g2">2 is A</button></div>
+      <div id="abx-verdict" class="verdict"></div>
+    </div>
+    <p class="hint">Plays the last note (or chord) with each stored setting. "Current" sliders stay as they are.</p>
+  </section>
+  <section>
+    <h2>Notes for Claude</h2>
+    <textarea id="note" placeholder="What you hear: too bright, boxy, plasticky, dead strings, nice…"></textarea>
+    <div class="row" style="margin-top:6px"><button id="save-note" class="primary">Save note</button><span id="note-ok" class="hint"></span></div>
+    <p class="hint">Saved with the current settings and the last thing played, to the workbench log.</p>
+  </section>
+</div>
+<div>
+  <section id="rec-section">
+    <h2>Songs</h2>
+    <div class="row">
+      <select id="song-list" style="flex:1;min-width:220px"></select>
+      <button id="song-play" class="primary">Render and play</button>
+      <button id="song-rescan" title="Look for new .gp files and arrangements">Rescan</button>
+      <label class="hint">part <select id="song-part"><option value="all">all</option></select></label>
+      <label class="hint" title="Off by default: the founder heard the dry render as closer to the record"><input id="song-room" type="checkbox"> room</label>
+    </div>
+    <div class="row" id="inst-row">
+      <label class="hint" title="Everything you play here: the notes on the fretboard and the songs">instrument <select id="inst"><option value="acoustic">acoustic</option><option value="electric">electric + Marshall</option></select></label>
+      <span id="amp-panel" class="hidden">
+        <label class="hint">pickup <select id="pickup"><option value="bridge">bridge</option><option value="both">both</option><option value="neck">neck</option></select></label>
+        <span id="amp-knobs"></span>
+      </span>
+    </div>
+    <canvas id="roll" class="hidden" width="1200" height="200"></canvas>
+    <p class="hint" style="margin-top:0">Guitar Pro files come from <code>reference/tracks</code> (drop new ones in and press Rescan). Arrangements come from <code>listening/covers/*.json</code>. Either is played straight from the model with the current knob settings, in memory (a few seconds); nothing is written to disk. Change a knob and render again to hear the whole song with it.</p>
+    <div class="row">
+      <button id="rec-play" class="primary" disabled>Play</button>
+      <span id="rec-time" class="hint" style="font-variant-numeric:tabular-nums"></span>
+      <span class="hint">Now playing: <strong id="now-playing" style="color:var(--ink)">nothing</strong></span>
+    </div>
+    <canvas id="rec-wave" width="1200" height="70" style="height:70px;cursor:pointer"></canvas>
+    <p class="hint">Click the waveform to jump. Saved notes record the song and where in it.</p>
+  </section>
+  <section>
+    <h2>Fretboard</h2>
+    <div id="board"><div id="frets"></div></div>
+    <p class="hint">Click to pluck. Shift-click plays it with Finger instead of Pick. Keys 1–6 pluck the open strings (1 = low E).</p>
+  </section>
+  <section>
+    <h2>Chords and progressions</h2>
+    <div class="chords" id="chords"></div>
+    <div class="row" style="margin-top:10px">
+      <label>Strum <select id="strum-dir"><option value="down">down</option><option value="up">up</option></select></label>
+      <label>spread <input id="spread" type="number" min="0" max="120" value="18" style="width:60px"> ms</label>
+      <label class="hint"><input id="humanize" type="checkbox" checked> humanize</label>
+    </div>
+    <p class="hint">Strum direction and spread apply to the chord buttons and progressions here. Songs carry their own picking in their song file.</p>
+    <h3>Progression</h3>
+    <div class="row">
+      <input id="prog" type="text" value="C Am F G" style="flex:1;min-width:160px">
+      <select id="pattern">
+        <option value="strum">Strum: one per bar</option>
+        <option value="folk" selected>Strum: D-DU-UDU</option>
+        <option value="arp">Arpeggio (eighths)</option>
+        <option value="travis">Travis picking</option>
+      </select>
+      <label>BPM <input id="bpm" type="number" min="40" max="220" value="92" style="width:60px"></label>
+      <label class="hint"><input id="loop" type="checkbox"> loop</label>
+      <button id="play-prog" class="primary">Play</button>
+    </div>
+    <p class="hint">Chord names from the buttons above, separated by spaces; one chord per bar. A new note on a string damps the note ringing on that string, like a hand would.</p>
+  </section>
+  <section>
+    <h2>Last sound</h2>
+    <canvas id="wave" width="1200" height="90"></canvas>
+    <canvas id="spec" width="1200" height="220"></canvas>
+    <div class="row" style="margin-top:6px">
+      <label class="hint">spectrogram <select id="spec-scale"><option value="log">log 40 Hz–16 kHz</option><option value="lin">linear 0–8 kHz</option></select></label>
+      <label class="hint">range <select id="spec-range"><option>60</option><option selected>80</option><option>100</option></select> dB</label>
+    </div>
+    <div class="readout" id="readout"></div>
+  </section>
+  <section id="refs-section" class="hidden">
+    <h2>Real guitar vs model</h2>
+    <div class="tabs"><button id="tab-blind" class="on">Blind trials</button><button id="tab-browse">Browse</button></div>
+    <div id="pane-blind">
+      <div class="row"><button id="trial-new" class="primary">New trial</button><span id="trial-label" class="hint"></span></div>
+      <div class="row"><button id="trial-x" disabled>Play X</button><button id="trial-y" disabled>Play Y</button></div>
+      <div class="row"><button id="guess-x" disabled>X is the real one</button><button id="guess-y" disabled>Y is the real one</button><button id="guess-none" disabled>Can't tell</button></div>
+      <input id="trial-comment" type="text" placeholder="optional: what gave it away?" style="width:100%">
+      <p class="verdict" id="trial-verdict"></p>
+      <p class="tally" id="tally"></p>
+      <p class="hint">Both sides are matched in loudness over their first second and cut to 1 s (the real clips are 1 s long, from GuitarSet, CC BY 4.0; they come from songs, so some carry faint ringing from earlier notes). The model uses your current settings. Every answer goes to the log.</p>
+    </div>
+    <div id="pane-browse" class="hidden">
+      <div class="row"><label>String <select id="ref-string"></select></label><label>Note <select id="ref-note" style="min-width:200px"></select></label></div>
+      <div class="row"><button id="ref-real">Play real</button><button id="ref-model">Play model</button></div>
+    </div>
+  </section>
+</div>
+</main>
+<script>
+"use strict";
+const STANDARD = [40, 45, 50, 55, 59, 64];
+// Open-string pitches for labels: standard, or what the playing song is tuned to.
+let OPEN = STANDARD.slice();
+const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const noteName = m => NAMES[m % 12] + (Math.floor(m / 12) - 1);
+const $ = id => document.getElementById(id);
+
+// Knob definitions: [key, label, min, max, step, scale] ("log" sliders map position to a log range).
+const GROUPS = {
+  "knobs-pluck": [["velocity", "Velocity", 0, 1, 0.01], ["distance", "Pluck distance from bridge (m)", 0.03, 0.3, 0.005], ["angle", "Pluck angle (0 = parallel to top)", 0, 1.57, 0.01], ["sympathetic", "Sympathetic strings", 0, 2, 0.05]],
+  "knobs-strings": [["eta_b", "String age: bending loss (×)", 0.25, 8, 0, "log"]],
+  "knobs-body": [["body_freq", "Body modes frequency (×)", 0.8, 1.25, 0.005], ["body_q", "Body modes Q (×)", 0.3, 3, 0, "log"], ["body_peak", "Body modes strength (×)", 0.25, 4, 0, "log"], ["bending_rad", "350 Hz top-bending mode: radiation", 0, 1.5, 0.01], ["dense_mobility", "Upper body mobility", 0.0003, 0.01, 0, "log"], ["mass_corner", "Bridge-mass roll-off (Hz)", 1000, 20000, 0, "log"], ["radiation_hz", "Radiation corner (Hz)", 50, 1000, 0, "log"]],
+  "knobs-pol": [["h_mobility", "Horizontal coupling", 0, 0.5, 0.005], ["split", "Polarization split", 0, 0.005, 0.0001], ["pick_noise", "Pick noise", 0, 0.2, 0.002]],
+};
+let DEFAULTS = {}, knobs = {}, tool = "pick", hasRefs = false;
+
+// ---------- audio ----------
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const master = ctx.createGain();
+const limiter = ctx.createDynamicsCompressor();
+limiter.threshold.value = -3; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.002; limiter.release.value = 0.1;
+master.connect(limiter); limiter.connect(ctx.destination);
+$("limiter").onchange = e => { master.disconnect(); master.connect(e.target.checked ? limiter : ctx.destination); };
+$("volume").oninput = e => master.gain.value = +e.target.value;
+master.gain.value = 0.8;
+const voices = new Set();
+const stringVoice = new Map();
+let progTimer = null;
+
+function stopAll() {
+  for (const v of voices) { try { v.src.stop(); } catch (e) {} }
+  voices.clear(); stringVoice.clear();
+  if (progTimer) { clearTimeout(progTimer); progTimer = null; }
+  // Stopping a song keeps its place, so Play resumes it.
+  if (rec.playing) { rec.paused = recPos(); $("rec-play").textContent = "Play"; drawRecWave(); }
+  rec.playing = null;
+  clearBoard();
+}
+$("stop").onclick = stopAll;
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input[type=text], textarea, input[type=number]")) return;
+  if (e.key === "Escape") stopAll();
+  if (/^[1-6]$/.test(e.key)) pluck(+e.key - 1, 0, e.shiftKey ? "finger" : tool);
+});
+
+/** Play a buffer at `when`; with `string` set, it damps that string's ringing note first. */
+function play(buf, when = 0, gain = 1, string = null, offset = 0) {
+  ctx.resume();
+  const t = Math.max(when, ctx.currentTime);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const g = ctx.createGain(); g.gain.value = gain;
+  src.connect(g); g.connect(master);
+  if (string !== null) {
+    const prev = stringVoice.get(string);
+    if (prev) { prev.g.gain.setTargetAtTime(0, t, 0.012); try { prev.src.stop(t + 0.1); } catch (e) {} }
+  }
+  const v = { src, g };
+  voices.add(v); src.onended = () => voices.delete(v);
+  if (string !== null) stringVoice.set(string, v);
+  src.start(t, offset);
+  return v;
+}
+
+// ---------- rendering (cached) ----------
+const cache = new Map();
+let pending = 0;
+function progress(d) {
+  pending += d;
+  $("progress").style.width = pending > 0 ? "70%" : "0";
+}
+// Electric guitar and amp: the instrument selector and the amp's front panel (knobs read 0-10 like the amp's).
+const AMP = [["gain", 6], ["bass", 5], ["mid", 7], ["treble", 6], ["presence", 5], ["master", 5]];
+function instrumentParams(p) {
+  if ($("inst").value !== "electric") return;
+  p.set("instrument", "electric");
+  p.set("pickup", $("pickup").value);
+  for (const [k] of AMP) p.set("amp_" + k, $("amp-" + k).value / 10);
+}
+// What a saved note records about the instrument.
+function instrumentSettings() {
+  if ($("inst").value !== "electric") return { instrument: "acoustic" };
+  return { instrument: "electric", pickup: $("pickup").value, amp: Object.fromEntries(AMP.map(([k]) => [k, +$("amp-" + k).value])) };
+}
+function query(string, fret, over = {}, set = knobs, useTool = tool) {
+  const p = new URLSearchParams({ string, fret, tool: useTool });
+  for (const [k, v] of Object.entries({ ...set, ...over })) p.set(k, v);
+  instrumentParams(p);
+  return p.toString();
+}
+async function render(string, fret, over = {}, set = knobs, useTool = tool) {
+  const q = query(string, fret, over, set, useTool);
+  if (cache.has(q)) return cache.get(q);
+  const job = (async () => {
+    progress(1);
+    try {
+      const r = await fetch("/api/render?" + q);
+      if (!r.ok) throw new Error(await r.text());
+      const info = JSON.parse(r.headers.get("X-Render") || "{}");
+      const buf = await ctx.decodeAudioData(await r.arrayBuffer());
+      return { buf, info, string, fret };
+    } finally { progress(-1); }
+  })();
+  cache.set(q, job);
+  if (cache.size > 400) cache.delete(cache.keys().next().value);
+  job.catch(() => cache.delete(q));
+  return job;
+}
+const seedFor = i => $("vary-seed").checked ? 1 + Math.floor(Math.random() * 6) : knobs.seed;
+
+// "Last thing played", so settings A/B can replay it.
+let last = null;
+function remember(kind, args) { last = { kind, args }; }
+
+async function pluck(string, fret, useTool = tool, set = knobs, show = true) {
+  const n = await render(string, fret, { seed: seedFor() }, set, useTool);
+  play(n.buf, 0, 1, string);
+  flash(string, fret);
+  if (show) { draw(n.buf); readout(n, useTool); }
+  if (set === knobs) remember("note", [string, fret, useTool]);
+  status(`${noteName(OPEN[string] + fret)} · string ${string + 1} fret ${fret} · rendered in ${n.info.ms} ms`);
+}
+
+// ---------- knobs ----------
+function toSlider(def, v) { return def[5] === "log" ? Math.log(v / def[2]) / Math.log(def[3] / def[2]) * 1000 : v; }
+function fromSlider(def, s) { return def[5] === "log" ? def[2] * Math.pow(def[3] / def[2], s / 1000) : +s; }
+function fmt(v) { return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toPrecision(3); }
+function buildKnobs() {
+  for (const [group, defs] of Object.entries(GROUPS)) {
+    const el = $(group);
+    for (const def of defs) {
+      const [key, label, min, max, step, scale] = def;
+      const wrap = document.createElement("div"); wrap.className = "knob";
+      const input = document.createElement("input"); input.type = "range";
+      if (scale === "log") { input.min = 0; input.max = 1000; input.step = 1; } else { input.min = min; input.max = max; input.step = step; }
+      const out = document.createElement("output");
+      const lab = document.createElement("label"); lab.textContent = label;
+      wrap.append(lab, out, input); el.append(wrap);
+      const sync = () => { out.textContent = fmt(knobs[key]); input.value = toSlider(def, knobs[key]); wrap.classList.toggle("changed", Math.abs(knobs[key] - DEFAULTS[key]) > 1e-12 * Math.max(1, Math.abs(DEFAULTS[key]))); };
+      input.oninput = () => { knobs[key] = fromSlider(def, input.value); sync(); };
+      input.onchange = () => { if (last) replay(knobs); };
+      def.sync = sync;
+    }
+  }
+}
+function syncAll() { for (const defs of Object.values(GROUPS)) for (const d of defs) d.sync(); }
+$("reset").onclick = () => { knobs = { ...DEFAULTS }; syncAll(); };
+$("copy").onclick = async () => {
+  const diff = Object.fromEntries(Object.entries(knobs).filter(([k, v]) => v !== DEFAULTS[k]));
+  await navigator.clipboard.writeText(JSON.stringify({ tool, changed: diff }, null, 1));
+  status("Changed settings copied to the clipboard.");
+};
+function setTool(t) { tool = t; $("tool-pick").classList.toggle("on", t === "pick"); $("tool-finger").classList.toggle("on", t === "finger"); }
+$("tool-pick").onclick = () => setTool("pick");
+$("tool-finger").onclick = () => setTool("finger");
+
+// ---------- fretboard ----------
+/** Relabel the fretboard for a tuning (string letters stay; note names follow the pitch). */
+function setTuning(open) {
+  OPEN = (open && open.length === 6 ? open : STANDARD).slice();
+  for (const c of document.querySelectorAll("#frets .cell")) c.querySelector("span").textContent = noteName(OPEN[+c.dataset.s] + +c.dataset.f);
+  for (const l of document.querySelectorAll("#frets .open-label")) l.textContent = noteName(OPEN[+l.dataset.s]);
+}
+function buildBoard() {
+  const el = $("frets");
+  for (let s = 5; s >= 0; s--) {
+    const lab = document.createElement("div"); lab.className = "num open-label"; lab.dataset.s = s; lab.textContent = noteName(OPEN[s]); el.append(lab);
+    for (let f = 0; f <= 20; f++) {
+      const c = document.createElement("div");
+      c.className = "cell" + (f === 0 ? " open" : "");
+      c.style.setProperty("--th", (1 + (5 - s) * 0.45).toFixed(1) + "px");
+      c.dataset.s = s; c.dataset.f = f;
+      c.innerHTML = `<span>${noteName(OPEN[s] + f)}</span>`;
+      c.onclick = e => pluck(s, f, e.shiftKey ? "finger" : tool);
+      el.append(c);
+    }
+  }
+  el.append(document.createElement("div"));
+  for (let f = 0; f <= 20; f++) {
+    const n = document.createElement("div");
+    n.className = "num" + ([3, 5, 7, 9, 12, 15, 17, 19].includes(f) ? " dot" : "");
+    n.textContent = f; el.append(n);
+  }
+}
+function flash(s, f) {
+  const c = document.querySelector(`#frets .cell[data-s="${s}"][data-f="${f}"]`);
+  if (!c) return;
+  c.classList.add("hit"); setTimeout(() => c.classList.remove("hit"), 260);
+}
+
+// ---------- chords ----------
+// Frets low E to high E; -1 = not played.
+const CHORDS = {
+  E: [0, 2, 2, 1, 0, 0], Em: [0, 2, 2, 0, 0, 0], E7: [0, 2, 0, 1, 0, 0],
+  A: [-1, 0, 2, 2, 2, 0], Am: [-1, 0, 2, 2, 1, 0], A7: [-1, 0, 2, 0, 2, 0],
+  D: [-1, -1, 0, 2, 3, 2], Dm: [-1, -1, 0, 2, 3, 1], D7: [-1, -1, 0, 2, 1, 2],
+  G: [3, 2, 0, 0, 0, 3], G7: [3, 2, 0, 0, 0, 1], C: [-1, 3, 2, 0, 1, 0], C7: [-1, 3, 2, 3, 1, 0],
+  Cadd9: [-1, 3, 2, 0, 3, 0], F: [1, 3, 3, 2, 1, 1], Fmaj7: [-1, -1, 3, 2, 1, 0], Bm: [-1, 2, 4, 4, 3, 2],
+};
+function buildChords() {
+  for (const name of Object.keys(CHORDS)) {
+    const b = document.createElement("button"); b.textContent = name;
+    b.onclick = () => strum(name, $("strum-dir").value, +$("spread").value, 0.7);
+    $("chords").append(b);
+  }
+}
+const humanize = () => $("humanize").checked;
+async function chordNotes(name, set, useTool, velocity, strings) {
+  const shape = CHORDS[name];
+  const list = strings.filter(s => shape[s] >= 0);
+  const notes = await Promise.all(list.map(s => render(s, shape[s], { velocity: Math.min(1, Math.max(0, velocity + (humanize() ? (Math.random() - 0.5) * 0.08 : 0))), seed: humanize() ? 1 + Math.floor(Math.random() * 6) : set.seed }, set, useTool)));
+  return list.map((s, i) => ({ s, f: shape[s], n: notes[i] }));
+}
+async function strum(name, dir, spreadMs, velocity, set = knobs, useTool = tool, when = 0, strings = [0, 1, 2, 3, 4, 5], show = true) {
+  if (!CHORDS[name]) { status(`Unknown chord "${name}"`); return; }
+  const notes = await chordNotes(name, set, useTool, velocity, strings);
+  if (dir === "up") notes.reverse();
+  const t0 = Math.max(when, ctx.currentTime + 0.03);
+  notes.forEach((x, i) => {
+    const jitter = humanize() ? (Math.random() - 0.5) * 0.004 : 0;
+    play(x.n.buf, t0 + i * spreadMs / 1000 + jitter, 1, x.s);
+    setTimeout(() => flash(x.s, x.f), Math.max(0, (t0 - ctx.currentTime) * 1000 + i * spreadMs));
+  });
+  if (show && notes.length) { draw(mixdown(notes.map((x, i) => [x.n.buf, i * spreadMs / 1000]))); readout(notes[0].n, useTool, `${name} chord, ${dir}`); }
+  if (set === knobs && show) remember("chord", [name, dir, spreadMs, velocity, useTool]);
+  status(`${name} ${dir}-strum, ${notes.length} strings`);
+}
+function mixdown(parts) {
+  const len = Math.max(...parts.map(([b, t]) => b.length + Math.round(t * b.sampleRate)));
+  const out = ctx.createBuffer(1, len, parts[0][0].sampleRate), d = out.getChannelData(0);
+  for (const [b, t] of parts) { const src = b.getChannelData(0), o = Math.round(t * b.sampleRate); for (let i = 0; i < src.length; i++) d[i + o] += src[i]; }
+  return out;
+}
+
+// ---------- progressions ----------
+// Each pattern is a list of eighth-note steps: [what, velocity]; what = "D"/"U" strum, or string roles.
+const PATTERNS = {
+  strum: [["D", 0.75], null, null, null, null, null, null, null],
+  folk: [["D", 0.75], null, ["D", 0.65], ["U", 0.45], null, ["U", 0.45], ["D", 0.65], ["U", 0.45]],
+  arp: [["B", 0.6], [2, 0.45], [3, 0.45], [4, 0.5], [5, 0.5], [4, 0.45], [3, 0.45], [2, 0.45]],
+  travis: [["B+5", 0.6], [4, 0.4], ["B2", 0.55], [3, 0.4], ["B", 0.55], [5, 0.45], ["B2", 0.55], [4, 0.4]],
+};
+function roleStrings(name, role) {
+  const shape = CHORDS[name];
+  const played = [0, 1, 2, 3, 4, 5].filter(s => shape[s] >= 0);
+  const bass = played[0];
+  if (role === "B") return [bass];
+  // Alternate bass: the next string up that the chord uses.
+  if (role === "B2") return [played.find(s => s > bass) ?? bass];
+  if (role === "B+5") return [bass, 5];
+  return shape[role] >= 0 ? [role] : [];
+}
+async function playProgression(set = knobs, useTool = tool, show = true) {
+  stopAll();
+  const chords = $("prog").value.trim().split(/\s+/).filter(Boolean);
+  const bad = chords.filter(c => !CHORDS[c]);
+  if (bad.length) { status(`Unknown chord(s): ${bad.join(", ")}. Known: ${Object.keys(CHORDS).join(" ")}`); return; }
+  const pat = PATTERNS[$("pattern").value], eighth = 30 / +$("bpm").value;
+  status("Rendering the progression…");
+  // Pre-render every note the bar needs (cached), so timing is exact.
+  const bars = [];
+  for (const name of chords) {
+    const steps = [];
+    for (const step of pat) {
+      if (!step) { steps.push(null); continue; }
+      const [what, vel] = step;
+      if (what === "D" || what === "U") {
+        const strings = what === "U" ? [2, 3, 4, 5] : [0, 1, 2, 3, 4, 5];
+        steps.push({ strum: what, notes: await chordNotes(name, set, useTool, vel, strings) });
+      } else {
+        steps.push({ notes: await chordNotes(name, set, useTool, vel, roleStrings(name, what)) });
+      }
+    }
+    bars.push(steps);
+  }
+  const start = ctx.currentTime + 0.1;
+  const parts = [];
+  bars.forEach((steps, b) => steps.forEach((st, i) => {
+    if (!st) return;
+    let notes = st.notes;
+    if (st.strum === "U") notes = [...notes].reverse();
+    const spread = st.strum ? +$("spread").value / 1000 * (st.strum === "U" ? 0.7 : 1) : 0;
+    notes.forEach((x, j) => {
+      const t = (b * 8 + i) * eighth + j * spread + (humanize() ? (Math.random() - 0.5) * 0.008 : 0);
+      play(x.n.buf, start + t, 1, x.s);
+      if (show && parts.length < 64) parts.push([x.n.buf, Math.max(0, t)]);
+    });
+  }));
+  if (show && parts.length) draw(mixdown(parts));
+  if (set === knobs && show) remember("prog", [useTool]);
+  status(`${chords.join(" ")} · ${$("pattern").selectedOptions[0].text} · ${$("bpm").value} BPM`);
+  const total = chords.length * 8 * eighth * 1000;
+  if ($("loop").checked) progTimer = setTimeout(() => playProgression(set, useTool, false), total);
+}
+$("play-prog").onclick = () => playProgression();
+
+// ---------- settings A/B ----------
+let A = null, B = null, abxOrder = null;
+function updateAB() { $("play-a").disabled = !A || !last; $("play-b").disabled = !B || !last; $("ab-blind").disabled = !(A && B && last); }
+$("save-a").onclick = () => { A = { knobs: { ...knobs }, tool }; $("save-a").textContent = "A stored ✓"; updateAB(); };
+$("save-b").onclick = () => { B = { knobs: { ...knobs }, tool }; $("save-b").textContent = "B stored ✓"; updateAB(); };
+async function replay(set, useTool = tool) {
+  if (!last) return;
+  stopAll();
+  const a = last.args;
+  if (last.kind === "recording") { status("A/B settings apply to notes, chords and progressions, not to recordings."); return; }
+  if (last.kind === "note") await pluck(a[0], a[1], useTool, set, set === knobs);
+  else if (last.kind === "chord") await strum(a[0], a[1], a[2], a[3], set, useTool, 0, [0, 1, 2, 3, 4, 5], set === knobs);
+  else await playProgression(set, useTool, set === knobs);
+}
+$("play-a").onclick = () => replay(A.knobs, A.tool);
+$("play-b").onclick = () => replay(B.knobs, B.tool);
+$("ab-blind").onclick = () => {
+  abxOrder = Math.random() < 0.5 ? [A, B] : [B, A];
+  $("ab-blind-ui").classList.remove("hidden"); $("abx-verdict").textContent = ""; $("abx-verdict").className = "verdict";
+};
+$("abx-1").onclick = () => replay(abxOrder[0].knobs, abxOrder[0].tool);
+$("abx-2").onclick = () => replay(abxOrder[1].knobs, abxOrder[1].tool);
+function abxGuess(i) {
+  const right = abxOrder[i] === A;
+  $("abx-verdict").textContent = right ? "Right: that was A." : "No: that was B.";
+  $("abx-verdict").className = "verdict " + (right ? "good" : "bad");
+  log({ type: "settings_blind", correct: right, a: A, b: B, played: last });
+}
+$("abx-g1").onclick = () => abxGuess(0);
+$("abx-g2").onclick = () => abxGuess(1);
+
+// ---------- drawing ----------
+function draw(buf) {
+  const x = buf.getChannelData(0), rate = buf.sampleRate;
+  // waveform
+  const w = $("wave"), g = w.getContext("2d");
+  g.fillStyle = "#0f0e0d"; g.fillRect(0, 0, w.width, w.height);
+  g.strokeStyle = "#e07a45"; g.beginPath();
+  const per = Math.max(1, Math.floor(x.length / w.width));
+  let peak = 1e-9; for (let i = 0; i < x.length; i++) peak = Math.max(peak, Math.abs(x[i]));
+  for (let px = 0; px < w.width; px++) {
+    let lo = 0, hi = 0;
+    for (let i = px * per; i < Math.min(x.length, (px + 1) * per); i++) { lo = Math.min(lo, x[i]); hi = Math.max(hi, x[i]); }
+    g.moveTo(px + 0.5, w.height / 2 - hi / peak * w.height * 0.48); g.lineTo(px + 0.5, w.height / 2 - lo / peak * w.height * 0.48);
+  }
+  g.stroke();
+  // spectrogram
+  const c = $("spec"), h = c.getContext("2d"), W = c.width, H = c.height;
+  const N = 2048, hop = Math.max(128, Math.floor(x.length / W));
+  const frames = Math.max(1, Math.floor((x.length - N) / hop));
+  const img = h.createImageData(W, H), win = new Float32Array(N);
+  for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N);
+  const logScale = $("spec-scale").value === "log", range = +$("spec-range").value;
+  const binOf = y => {
+    const fr = 1 - y / H;
+    const hz = logScale ? 40 * Math.pow(16000 / 40, fr) : fr * 8000;
+    return hz / rate * N;
+  };
+  const rows = Array.from({ length: H }, (_, y) => binOf(y));
+  const re = new Float32Array(N), im = new Float32Array(N);
+  const cols = [];
+  let top = -1e9;
+  for (let px = 0; px < W; px++) {
+    const f = Math.floor(px / W * frames), o = f * hop;
+    for (let i = 0; i < N; i++) { re[i] = (x[o + i] || 0) * win[i]; im[i] = 0; }
+    fft(re, im);
+    const col = new Float32Array(H);
+    for (let y = 0; y < H; y++) {
+      const b = rows[y], b0 = Math.floor(b), b1 = Math.min(N / 2 - 1, Math.ceil(rows[Math.max(0, y - 1)] || b));
+      let m = 0; for (let k = b0; k <= Math.max(b0, b1); k++) m = Math.max(m, re[k] * re[k] + im[k] * im[k]);
+      col[y] = 10 * Math.log10(m + 1e-20); top = Math.max(top, col[y]);
+    }
+    cols.push(col);
+  }
+  for (let px = 0; px < W; px++) for (let y = 0; y < H; y++) {
+    const v = Math.min(1, Math.max(0, (cols[px][y] - (top - range)) / range));
+    const [r, gg, bb] = heat(v), k = (y * W + px) * 4;
+    img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = bb; img.data[k + 3] = 255;
+  }
+  h.putImageData(img, 0, 0);
+  h.fillStyle = "rgba(255,255,255,.55)"; h.font = "11px system-ui";
+  const marks = logScale ? [100, 250, 500, 1000, 2000, 4000, 8000] : [1000, 2000, 4000, 6000];
+  for (const hz of marks) {
+    const fr = logScale ? Math.log(hz / 40) / Math.log(16000 / 40) : hz / 8000;
+    h.fillText(hz >= 1000 ? hz / 1000 + "k" : hz, 4, (1 - fr) * H - 2);
+  }
+  h.fillText(`${(x.length / rate).toFixed(2)} s`, W - 50, H - 4);
+  lastDrawn = buf;
+}
+let lastDrawn = null;
+$("spec-scale").onchange = $("spec-range").onchange = () => lastDrawn && draw(lastDrawn);
+function heat(v) {
+  // dark -> purple -> orange -> pale yellow
+  const stops = [[15, 14, 13], [70, 30, 110], [200, 70, 60], [245, 160, 60], [255, 245, 200]];
+  const p = v * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(p)), t = p - i;
+  return stops[i].map((a, j) => Math.round(a + (stops[i + 1][j] - a) * t));
+}
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = a + len / 2;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+      }
+    }
+  }
+}
+function readout(n, useTool, what) {
+  const i = n.info, m = OPEN[n.string] + n.fret;
+  const cells = [
+    ["Sound", what || `${noteName(m)} (string ${n.string + 1}, fret ${n.fret})`], ["Pitch", `${i.hz.toFixed(2)} Hz`], ["Inharmonicity B", i.b],
+    ["Peak", `${(20 * Math.log10(i.peak)).toFixed(1)} dBFS`], ["Length", `${i.seconds.toFixed(2)} s`], ["Render", `${i.ms} ms`], ["Tool", useTool],
+  ];
+  $("readout").innerHTML = cells.map(([k, v]) => `<div><span>${k}</span>${v}</div>`).join("");
+}
+function status(s) { $("status").textContent = s; }
+
+// ---------- log ----------
+let log = async function (entry) {
+  try {
+    const r = await fetch("/api/log", { method: "POST", body: JSON.stringify({ ...entry, settings: { tool, knobs, ...instrumentSettings() } }) });
+    return r.ok;
+  } catch (e) { return false; }
+};
+$("save-note").onclick = async () => {
+  const text = $("note").value.trim();
+  if (!text) return;
+  const ok = await log({ type: "note", text, last });
+  $("note-ok").textContent = ok ? "Saved." : "Could not save (is the workbench still running?)";
+  if (ok) $("note").value = "";
+};
+
+// ---------- real vs model ----------
+let REFS = [], trial = null, tally = { right: 0, wrong: 0, cant: 0 };
+async function refBuffer(file) {
+  const k = "ref:" + file;
+  if (!cache.has(k)) cache.set(k, fetch("/api/ref?file=" + encodeURIComponent(file)).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)));
+  return cache.get(k);
+}
+/** Cut to 1 s with a 50 ms fade and scale to -20 dB RMS over that second, aligned to the attack. */
+function matched(buf) {
+  const x = buf.getChannelData(0), rate = buf.sampleRate;
+  let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v));
+  let on = 0; while (on < x.length && Math.abs(x[on]) < peak * 0.2) on++;
+  on = Math.max(0, on - Math.round(0.02 * rate));
+  const n = Math.min(rate, x.length - on), out = ctx.createBuffer(1, n, rate), d = out.getChannelData(0);
+  let sum = 0; for (let i = 0; i < n; i++) { d[i] = x[on + i]; sum += d[i] * d[i]; }
+  const k = Math.pow(10, -20 / 20) / Math.sqrt(sum / n + 1e-20), fade = Math.round(0.05 * rate);
+  for (let i = 0; i < n; i++) d[i] *= k * (i > n - fade ? (n - i) / fade : 1);
+  return out;
+}
+async function newTrial() {
+  const pool = REFS.filter(r => +r.annotated_dur >= 0.9);
+  const r = pool[Math.floor(Math.random() * pool.length)];
+  const s = +r.string - 1, f = +r.fret;
+  const [real, model] = await Promise.all([refBuffer(r.file), render(s, f, { seed: seedFor() })]);
+  const sides = [{ kind: "real", buf: matched(real) }, { kind: "model", buf: matched(model.buf) }];
+  if (Math.random() < 0.5) sides.reverse();
+  trial = { ref: r, x: sides[0], y: sides[1], answered: false };
+  $("trial-label").textContent = `string ${s + 1}, fret ${f} (${noteName(OPEN[s] + f)})`;
+  for (const id of ["trial-x", "trial-y", "guess-x", "guess-y", "guess-none"]) $(id).disabled = false;
+  $("trial-verdict").textContent = ""; $("trial-verdict").className = "verdict"; $("trial-comment").value = "";
+  stopAll(); play(trial.x.buf); draw(trial.x.buf);
+}
+function guess(which) {
+  if (!trial || trial.answered) return;
+  trial.answered = true;
+  const realSide = trial.x.kind === "real" ? "x" : "y";
+  let msg, cls = "";
+  if (which === "none") { tally.cant++; msg = `X was the ${trial.x.kind}, Y the ${trial.y.kind}.`; }
+  else if (which === realSide) { tally.right++; msg = `Right: ${which.toUpperCase()} was the real guitar.`; cls = "good"; }
+  else { tally.wrong++; msg = `Fooled: ${which.toUpperCase()} was the model.`; cls = "bad"; }
+  $("trial-verdict").textContent = msg; $("trial-verdict").className = "verdict " + cls;
+  const n = tally.right + tally.wrong + tally.cant;
+  $("tally").textContent = `This session: ${n} trials · spotted the real one ${tally.right} · fooled ${tally.wrong} · couldn't tell ${tally.cant}`;
+  log({ type: "real_vs_model", guess: which, real_was: realSide, correct: which === realSide, ref: trial.ref, comment: $("trial-comment").value.trim() });
+}
+$("trial-new").onclick = newTrial;
+$("trial-x").onclick = () => { stopAll(); play(trial.x.buf); draw(trial.x.buf); };
+$("trial-y").onclick = () => { stopAll(); play(trial.y.buf); draw(trial.y.buf); };
+$("guess-x").onclick = () => guess("x");
+$("guess-y").onclick = () => guess("y");
+$("guess-none").onclick = () => guess("none");
+$("tab-blind").onclick = () => { $("pane-blind").classList.remove("hidden"); $("pane-browse").classList.add("hidden"); $("tab-blind").classList.add("on"); $("tab-browse").classList.remove("on"); };
+$("tab-browse").onclick = () => { $("pane-browse").classList.remove("hidden"); $("pane-blind").classList.add("hidden"); $("tab-browse").classList.add("on"); $("tab-blind").classList.remove("on"); };
+function fillBrowse() {
+  const ss = $("ref-string");
+  ss.innerHTML = [1, 2, 3, 4, 5, 6].map(s => `<option value="${s}">${s} (${noteName(OPEN[s - 1])})</option>`).join("");
+  const fill = () => {
+    const rows = REFS.filter(r => +r.string === +ss.value).sort((a, b) => +a.fret - +b.fret);
+    $("ref-note").innerHTML = rows.map(r => `<option value="${r.file}">fret ${r.fret} · ${noteName(OPEN[r.string - 1] + +r.fret)} · ${r.source} @${r.time}s</option>`).join("");
+  };
+  ss.onchange = fill; fill();
+}
+$("ref-real").onclick = async () => { const f = $("ref-note").value; if (!f) return; const b = await refBuffer(f); stopAll(); play(b); draw(b); };
+$("ref-model").onclick = () => { const r = REFS.find(x => x.file === $("ref-note").value); if (r) { stopAll(); pluck(+r.string - 1, +r.fret); } };
+
+// ---------- recordings ----------
+// The song player: the last rendered song, with Play/Pause, time, waveform and seek.
+const rec = { buf: null, name: null, playing: null, paused: 0 };
+function drawRecWave() {
+  const c = $("rec-wave"), g = c.getContext("2d");
+  g.fillStyle = "#0f0e0d"; g.fillRect(0, 0, c.width, c.height);
+  if (!rec.buf) return;
+  const x = rec.buf.getChannelData(0), per = Math.floor(x.length / c.width);
+  g.fillStyle = "#e07a45";
+  for (let px = 0; px < c.width; px++) {
+    let m = 0; for (let i = px * per; i < (px + 1) * per; i += 8) m = Math.max(m, Math.abs(x[i]));
+    const h = Math.min(1, m) * c.height * 0.48; g.fillRect(px, c.height / 2 - h, 1, 2 * h);
+  }
+  if (rec.playing) {
+    const pos = recPos(); g.fillStyle = "#ffffff"; g.fillRect(pos / rec.buf.duration * c.width, 0, 2, c.height);
+  }
+}
+const recPos = () => rec.playing ? Math.min(rec.buf.duration, rec.playing.from + ctx.currentTime - rec.playing.at) : 0;
+const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+function recPlay(buf, name, from = 0, roll = undefined) {
+  if (roll !== undefined || rec.name !== name) rec.roll = roll || null;
+  setTuning(rec.roll && rec.roll.tuning);
+  $("roll").classList.toggle("hidden", !rec.roll);
+  rec.buf = buf; rec.name = name;
+  $("now-playing").textContent = name;
+  stopAll();
+  const v = play(rec.buf, 0, 1, null, from);
+  rec.playing = { at: ctx.currentTime, from, v };
+  rec.paused = 0;
+  v.src.addEventListener("ended", () => { if (rec.playing && rec.playing.v === v) { rec.playing = null; rec.paused = 0; $("rec-play").textContent = "Play"; drawRecWave(); } });
+  $("rec-play").disabled = false;
+  $("rec-play").textContent = "Pause";
+  remember("recording", [name]);
+  status(`${name} · ${mmss(rec.buf.duration)}`);
+  (function tick() {
+    if (!rec.playing) return;
+    drawRecWave(); $("rec-time").textContent = `${mmss(recPos())} / ${mmss(rec.buf.duration)}`;
+    if (rec.roll) { drawRoll(recPos()); lightBoard(recPos()); }
+    requestAnimationFrame(tick);
+  })();
+}
+$("rec-wave").onclick = e => {
+  if (!rec.buf) return;
+  const r = e.target.getBoundingClientRect();
+  recPlay(rec.buf, rec.name, (e.clientX - r.left) / r.width * rec.buf.duration);
+};
+$("rec-play").onclick = () => {
+  if (rec.playing) { stopAll(); return; }
+  if (rec.buf) recPlay(rec.buf, rec.name, rec.paused || 0);
+};
+async function loadParts() {
+  // Songs with several guitars announce them ("#parts, rhythm, lead"); offer each one alone.
+  const name = $("song-list").value, sel = $("song-part");
+  sel.innerHTML = '<option value="all">all</option>';
+  if (!name) return;
+  const r = await fetch("/api/song-events?name=" + encodeURIComponent(name));
+  const text = await r.text();
+  // A slower answer for a song that is no longer selected must not overwrite the current one's parts.
+  if ($("song-list").value !== name) return;
+  const line = text.split(/\r?\n/).find(l => l.startsWith("#parts,"));
+  if (line) for (const p of line.split(",").slice(1).map(x => x.trim())) sel.insertAdjacentHTML("beforeend", `<option>${p.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</option>`);
+  sel.disabled = !line;
+}
+$("song-list").onchange = loadParts;
+$("amp-knobs").innerHTML = AMP.map(([k, d]) => `<label class="hint">${k} <input id="amp-${k}" type="number" min="0" max="10" step="0.5" value="${d}" style="width:3.5em"></label>`).join(" ");
+$("inst").onchange = () => { $("amp-panel").classList.toggle("hidden", $("inst").value !== "electric"); cache.clear(); };
+$("pickup").onchange = () => cache.clear();
+for (const [k] of AMP) $("amp-" + k).onchange = () => cache.clear();
+$("song-rescan").onclick = async () => { const keep = $("song-list").value; await loadSongs(); if ([...$("song-list").options].some(o => o.value === keep)) { $("song-list").value = keep; loadParts(); } };
+async function loadSongs() {
+  const names = await (await fetch("/api/songs")).json();
+  const esc = n => n.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  const isGp = n => /\.gp[345x]?$/i.test(n);
+  const gp = names.filter(isGp), arr = names.filter(n => !isGp(n));
+  const group = (label, list, show) => list.length ? `<optgroup label="${label}">` + list.map(n => `<option value="${esc(n)}">${esc(show(n))}</option>`).join("") + "</optgroup>" : "";
+  $("song-list").innerHTML = names.length
+    ? group("Guitar Pro files", gp, n => n.replace(/\.gp$/i, "")) + group("Arrangements", arr, n => n)
+    : "<option value=''>(no .gp files or arrangements yet)</option>";
+  $("song-play").disabled = !names.length;
+  loadParts();
+}
+$("song-play").onclick = async () => {
+  const name = $("song-list").value; if (!name) return;
+  stopAll();
+  const part = $("song-part").value;
+  const p = new URLSearchParams({ name, room: $("song-room").checked ? 1 : 0, part });
+  for (const [k, v] of Object.entries(knobs)) p.set(k, v);
+  instrumentParams(p);
+  $("song-play").disabled = true; status(`Rendering ${name} with the current settings…`); progress(1);
+  try {
+    const [r, er] = await Promise.all([fetch("/api/song?" + p), fetch("/api/song-events?name=" + encodeURIComponent(name) + "&part=" + encodeURIComponent(part))]);
+    if (!r.ok) throw new Error(await r.text());
+    const info = JSON.parse(r.headers.get("X-Render") || "{}");
+    const roll = er.ok ? parseRoll(await er.text()) : null;
+    const buf = await ctx.decodeAudioData(await r.arrayBuffer());
+    rec.paused = 0;
+    recPlay(buf, "song: " + name, 0, roll);
+    const inst = $("inst").value === "electric" ? `, electric (${$("pickup").value} pickup, ${AMP.map(([k]) => k + " " + $("amp-" + k).value).join(", ")})` : ", acoustic";
+    status(`${name}: ${info.plucks} plucks, ${info.seconds} s of music, rendered in ${info.render_s} s${inst}${$("song-room").checked ? ", with room" : ", dry"}`);
+  } catch (e) { status("Song failed: " + e.message); }
+  finally { $("song-play").disabled = false; progress(-1); }
+};
+const _log = log;
+log = entry => _log(last && last.kind === "recording" ? { ...entry, recording: { name: rec.name, at_seconds: +(rec.playing ? recPos() : rec.paused || 0).toFixed(1) } } : entry);
+
+// ---------- song display: tab roll and lit fretboard ----------
+function parseRoll(text) {
+  const notes = [], spans = [];
+  for (const line of text.split(/\r?\n/)) {
+    const f = line.split(",").map(x => x.trim());
+    if (f[0] === "#span") spans.push({ t0: +f[1], t1: +f[2], name: f[3] });
+    else if (line && !line.startsWith("#")) notes.push({ t: +f[0], s: +f[1], f: +f[2], v: +f[3], end: +f[5] });
+  }
+  notes.sort((a, b) => a.t - b.t);
+  const tun = text.split(/\r?\n/).find(l => l.startsWith("#tuning,"));
+  return { notes, spans, tuning: tun ? tun.split(",").slice(1).map(Number) : null };
+}
+/** Index of the first note starting at or after t (notes sorted by t). */
+function firstFrom(notes, t) {
+  let lo = 0, hi = notes.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (notes[m].t < t) lo = m + 1; else hi = m; }
+  return lo;
+}
+const PAST = 1.5, AHEAD = 6;
+function drawRoll(now) {
+  const c = $("roll"), g = c.getContext("2d"), W = c.width, H = c.height, top = 34, lane = (H - top - 6) / 6;
+  const x = t => (t - now + PAST) / (PAST + AHEAD) * W;
+  g.fillStyle = "#0f0e0d"; g.fillRect(0, 0, W, H);
+  // chord spans as bands, with names
+  g.font = "600 14px system-ui"; g.textBaseline = "middle";
+  for (const sp of rec.roll.spans) {
+    if (sp.t1 < now - PAST || sp.t0 > now + AHEAD) continue;
+    const a = Math.max(0, x(sp.t0)), b = Math.min(W, x(sp.t1));
+    g.fillStyle = sp.t0 <= now && now < sp.t1 ? "rgba(224,122,69,.16)" : "rgba(255,255,255,.04)";
+    g.fillRect(a, top, b - a - 1, H - top);
+    g.fillStyle = sp.t0 <= now && now < sp.t1 ? "#ffb48a" : "rgba(255,255,255,.55)";
+    g.fillText(sp.name, Math.max(a + 6, 6), top / 2);
+  }
+  // strings: high E on top, as in tab
+  for (let s = 0; s < 6; s++) {
+    const y = top + (5 - s + 0.5) * lane;
+    g.strokeStyle = "rgba(255,255,255,.18)"; g.lineWidth = 1 + (5 - s) * 0.0 + s * 0.25;
+    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+    g.fillStyle = "rgba(255,255,255,.45)"; g.font = "11px system-ui";
+    g.fillText(noteName(OPEN[s]).replace(/\d/, ""), 4, y);
+  }
+  // notes: a bar for how long it rings, the fret number where it is plucked
+  const notes = rec.roll.notes;
+  g.font = "600 12px system-ui"; g.textAlign = "center";
+  for (let i = firstFrom(notes, now - PAST - 6); i < notes.length && notes[i].t < now + AHEAD; i++) {
+    const n = notes[i];
+    if (n.end < now - PAST) continue;
+    const y = top + (5 - n.s + 0.5) * lane, a = x(n.t), b = x(n.end);
+    const sounding = n.t <= now && now < n.end;
+    g.fillStyle = sounding ? `rgba(224,122,69,${0.35 + 0.4 * Math.exp(-(now - n.t) / 1.5)})` : n.t > now ? "rgba(224,122,69,.28)" : "rgba(255,255,255,.12)";
+    g.fillRect(a, y - lane * 0.22, Math.max(2, b - a), lane * 0.44);
+    g.fillStyle = n.t > now || sounding ? "#fff" : "rgba(255,255,255,.4)";
+    g.beginPath(); g.arc(a, y, lane * 0.32, 0, 2 * Math.PI); g.fill();
+    g.fillStyle = "#1a1310"; g.fillText(String(n.f), a, y + 0.5);
+  }
+  g.textAlign = "left";
+  // playhead
+  g.fillStyle = "#ffffff"; g.fillRect(x(now) - 1, top - 4, 2, H - top + 4);
+}
+let lit = new Map();
+function lightBoard(now) {
+  const notes = rec.roll.notes, on = new Map();
+  for (let i = firstFrom(notes, now - 6); i < notes.length && notes[i].t <= now; i++) {
+    const n = notes[i];
+    if (now >= n.end || n.f > 20) continue;
+    // Brightest when plucked, fading as it decays; the latest pluck on a cell wins.
+    on.set(`${n.s}:${n.f}`, Math.max(0.25, Math.exp(-(now - n.t) / 0.9)));
+  }
+  for (const [k, cell] of lit) if (!on.has(k)) { cell.classList.remove("ring"); lit.delete(k); }
+  for (const [k, glow] of on) {
+    let cell = lit.get(k);
+    if (!cell) {
+      const [s, f] = k.split(":");
+      cell = document.querySelector(`#frets .cell[data-s="${s}"][data-f="${f}"]`);
+      if (!cell) continue;
+      cell.classList.add("ring"); lit.set(k, cell);
+    }
+    cell.style.setProperty("--glow", glow.toFixed(3));
+  }
+}
+function clearBoard() {
+  for (const cell of lit.values()) cell.classList.remove("ring");
+  lit.clear();
+}
+
+// ---------- start ----------
+(async () => {
+  const d = await (await fetch("/api/defaults")).json();
+  DEFAULTS = d.knobs; knobs = { ...DEFAULTS };
+  buildKnobs(); syncAll(); buildBoard(); buildChords(); loadSongs(); drawRecWave();
+  if (d.refs) {
+    REFS = await (await fetch("/api/refs")).json();
+    hasRefs = REFS.length > 0;
+    if (hasRefs) { $("refs-section").classList.remove("hidden"); fillBrowse(); }
+  }
+  const origRemember = remember;
+  remember = (k, a) => { origRemember(k, a); updateAB(); };
+  status(`Ready: steel-string acoustic · ${hasRefs ? REFS.length + " real reference notes" : "no reference notes (start with --refs)"} · click the fretboard`);
+})();
+</script>
+</body>
+</html>
