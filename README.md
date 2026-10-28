@@ -45,3 +45,8 @@ Double-click `workbench.cmd`, or run `cargo run --release --bin workbench`, then
 - `compare.py`: compares the model to those notes, band by band and string by string.
 
 Reference recordings are not in the repo. Download GuitarSet v1.1.0 from https://zenodo.org/records/3371780.
+
+## License
+GPL-3.0 (see `LICENSE`). You may use, change and share this code, but anything you distribute that is built
+on it must be released under the GPL too. The reference data the tools can download (GuitarSet, the Marshall
+JVM410H dataset) are not part of this repository and keep their own licenses (both CC BY 4.0).

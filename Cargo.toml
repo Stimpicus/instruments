@@ -3,6 +3,7 @@ name = "instruments"
 version = "0.1.0"
 edition = "2024"
 publish = false
+license = "GPL-3.0-only"
 description = "Physically modelled instruments, rendered offline into multisamples. No dependencies, no audio device."
 
 [dependencies]
